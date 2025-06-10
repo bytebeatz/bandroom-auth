@@ -9,7 +9,8 @@ go run cmd/main.go
 curl -X POST http://localhost:8081/auth/register \
  -H "Content-Type: application/json" \
  -d '{
-"email": "user1@email.com",
+"email": "user1@bandroom.xyz",
+"username": "user1",
 "password": "P4ssword!"
 }' | jq
 
@@ -24,11 +25,11 @@ curl -X POST http://localhost:8081/auth/register \
 
 curl -X POST http://localhost:8081/auth/login \
  -H "Content-Type: application/json" \
+ -c cookies.txt \
  -d '{
-"email": "user1@email.com",
+"email": "user1@bandroom.xyz",
 "password": "P4ssword!"
-}' \
- -c cookies.txt | jq
+}' | jq
 
 ### Expected Response
 
@@ -63,7 +64,7 @@ curl -X POST http://localhost:8081/auth/refresh \
 
 ## Logout (Invalidate Refresh Token)
 
-curl -X POST http://localhost:8080/auth/logout \
+curl -X POST http://localhost:8081/auth/logout \
  -b cookies.txt | jq
 
 ### Expected Response
@@ -72,7 +73,7 @@ curl -X POST http://localhost:8080/auth/logout \
 "message": "Logout successful"
 }
 
-\c bandroom_admin;
+# Create table for users
 
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 

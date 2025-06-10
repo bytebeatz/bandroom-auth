@@ -1,0 +1,19 @@
+# Ignore environment variables
+.env
+
+# Ignore IDE/editor files
+.vscode/
+.idea/
+
+# Ignore system files
+.DS_Store
+
+# Ignore Go build output
+bin/
+*.exe
+*.out
+*.test
+
+# Ignore logs
+*.log
+
