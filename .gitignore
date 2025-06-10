@@ -17,3 +17,4 @@ bin/
 # Ignore logs
 *.log
 
+cookies.txt
