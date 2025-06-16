@@ -14,10 +14,21 @@ import (
 // GetUserByEmail retrieves a user by email for authentication.
 func GetUserByEmail(email string) (*models.User, error) {
 	var user models.User
-	var refreshToken sql.NullString
+	var (
+		refreshToken       sql.NullString
+		verificationToken  sql.NullString
+		verificationSentAt sql.NullTime
+		lastLogin          sql.NullTime
+		deletedAt          sql.NullTime
+	)
 
-	query := `SELECT id, email, username, password_hash, role, refresh_token, created_at, updated_at, last_password_change 
-	          FROM users WHERE email = $1`
+	query := `SELECT 
+		id, email, username, password_hash, role, 
+		refresh_token, is_verified, verification_token, verification_sent_at, 
+		is_active, last_login, last_password_change, 
+		created_at, updated_at, deleted_at 
+		FROM users WHERE email = $1`
+
 	row := db.DB.QueryRow(query, email)
 	err := row.Scan(
 		&user.ID,
@@ -26,9 +37,15 @@ func GetUserByEmail(email string) (*models.User, error) {
 		&user.PasswordHash,
 		&user.Role,
 		&refreshToken,
+		&user.IsVerified,
+		&verificationToken,
+		&verificationSentAt,
+		&user.IsActive,
+		&lastLogin,
+		&user.LastPasswordChange,
 		&user.CreatedAt,
 		&user.UpdatedAt,
-		&user.LastPasswordChange,
+		&deletedAt,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -40,8 +57,18 @@ func GetUserByEmail(email string) (*models.User, error) {
 
 	if refreshToken.Valid {
 		user.RefreshToken = &refreshToken.String
-	} else {
-		user.RefreshToken = nil
+	}
+	if verificationToken.Valid {
+		user.VerificationToken = &verificationToken.String
+	}
+	if verificationSentAt.Valid {
+		user.VerificationSentAt = verificationSentAt.Time
+	}
+	if lastLogin.Valid {
+		user.LastLogin = &lastLogin.Time
+	}
+	if deletedAt.Valid {
+		user.DeletedAt = &deletedAt.Time
 	}
 
 	return &user, nil
@@ -50,10 +77,21 @@ func GetUserByEmail(email string) (*models.User, error) {
 // GetUserByID retrieves a user by UUID.
 func GetUserByID(userID uuid.UUID) (*models.User, error) {
 	var user models.User
-	var refreshToken sql.NullString
+	var (
+		refreshToken       sql.NullString
+		verificationToken  sql.NullString
+		verificationSentAt sql.NullTime
+		lastLogin          sql.NullTime
+		deletedAt          sql.NullTime
+	)
 
-	query := `SELECT id, email, username, password_hash, role, refresh_token, created_at, updated_at, last_password_change 
-	          FROM users WHERE id = $1`
+	query := `SELECT 
+		id, email, username, password_hash, role, 
+		refresh_token, is_verified, verification_token, verification_sent_at, 
+		is_active, last_login, last_password_change, 
+		created_at, updated_at, deleted_at 
+		FROM users WHERE id = $1`
+
 	row := db.DB.QueryRow(query, userID)
 	err := row.Scan(
 		&user.ID,
@@ -62,9 +100,15 @@ func GetUserByID(userID uuid.UUID) (*models.User, error) {
 		&user.PasswordHash,
 		&user.Role,
 		&refreshToken,
+		&user.IsVerified,
+		&verificationToken,
+		&verificationSentAt,
+		&user.IsActive,
+		&lastLogin,
+		&user.LastPasswordChange,
 		&user.CreatedAt,
 		&user.UpdatedAt,
-		&user.LastPasswordChange,
+		&deletedAt,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -75,8 +119,18 @@ func GetUserByID(userID uuid.UUID) (*models.User, error) {
 
 	if refreshToken.Valid {
 		user.RefreshToken = &refreshToken.String
-	} else {
-		user.RefreshToken = nil
+	}
+	if verificationToken.Valid {
+		user.VerificationToken = &verificationToken.String
+	}
+	if verificationSentAt.Valid {
+		user.VerificationSentAt = verificationSentAt.Time
+	}
+	if lastLogin.Valid {
+		user.LastLogin = &lastLogin.Time
+	}
+	if deletedAt.Valid {
+		user.DeletedAt = &deletedAt.Time
 	}
 
 	return &user, nil
@@ -160,6 +214,20 @@ func DeleteUser(userID uuid.UUID) error {
 // ClearRefreshToken properly removes the refresh token from the database
 func ClearRefreshToken(userID uuid.UUID) error {
 	query := `UPDATE users SET refresh_token = NULL, updated_at = current_timestamp WHERE id = $1`
+	_, err := db.DB.Exec(query, userID)
+	return err
+}
+
+// SetVerificationToken updates the user's verification token in the DB
+func SetVerificationToken(userID uuid.UUID, token string) error {
+	query := `UPDATE users SET verification_token = $1, verification_sent_at = NOW(), updated_at = NOW() WHERE id = $2`
+	_, err := db.DB.Exec(query, token, userID)
+	return err
+}
+
+// MarkEmailVerified sets is_verified = true and clears verification_token
+func MarkEmailVerified(userID uuid.UUID) error {
+	query := `UPDATE users SET is_verified = TRUE, verification_token = NULL, updated_at = NOW() WHERE id = $1`
 	_, err := db.DB.Exec(query, userID)
 	return err
 }

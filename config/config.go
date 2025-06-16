@@ -25,7 +25,7 @@ var Config *AppConfig
 func LoadConfig() {
 	// Load .env file (if exists)
 	if err := godotenv.Load(); err != nil {
-		log.Println("Warning: No .env file found, using system environment variables")
+		log.Println("⚠️  Warning: No .env file found, using system environment variables")
 	}
 
 	// Get values from environment variables
@@ -39,27 +39,31 @@ func LoadConfig() {
 
 	debugMode, err := strconv.ParseBool(getEnv("DEBUG_MODE", "false"))
 	if err != nil {
-		log.Println("Warning: Invalid value for DEBUG_MODE, defaulting to false")
+		log.Println("⚠️  Warning: Invalid value for DEBUG_MODE, defaulting to false")
 		debugMode = false
 	}
+
+	jwtSecret := getEnv("JWT_SECRET", "")
 
 	Config = &AppConfig{
 		ServiceName: getEnv("SERVICE_NAME", "Authentication"),
 		DatabaseURL: databaseURL,
-		DBPassword:  dbPassword, // ✅ Store separately
-		JWTSecret:   getEnv("JWT_SECRET", ""),
+		DBPassword:  dbPassword,
+		JWTSecret:   jwtSecret,
 		ServerPort:  getEnv("PORT", "8080"),
 		DebugMode:   debugMode,
 	}
 
 	// Ensure required values exist
 	if Config.DatabaseURL == "" {
-		log.Fatal("DATABASE_URL is required but missing")
+		log.Fatal("❌ DATABASE_URL is required but missing")
 	}
 	if Config.JWTSecret == "" {
-		log.Fatal("JWT_SECRET is required but missing")
+		log.Fatal("❌ JWT_SECRET is required but missing")
 	}
 
+	// Debug output
+	log.Println("🔐 Loaded JWT_SECRET length:", len(Config.JWTSecret))
 	log.Println("✅ Configuration loaded successfully")
 }
 
@@ -71,3 +75,4 @@ func getEnv(key, defaultValue string) string {
 	}
 	return value
 }
+

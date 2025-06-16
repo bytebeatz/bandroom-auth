@@ -9,6 +9,7 @@ import (
 	"github.com/bytebeatz/bandroom-auth/middlewares"
 	"github.com/bytebeatz/bandroom-auth/models"
 	"github.com/bytebeatz/bandroom-auth/repository"
+	"github.com/bytebeatz/bandroom-auth/services"
 	"github.com/bytebeatz/bandroom-auth/utils"
 
 	"github.com/gin-gonic/gin"
@@ -157,7 +158,13 @@ func RefreshToken(c *gin.Context) {
 		return
 	}
 
-	user, err := repository.GetUserByID(claims.UserID)
+	userID, err := uuid.Parse(claims.UserID)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid user ID in token"})
+		return
+	}
+
+	user, err := repository.GetUserByID(userID)
 	if err != nil || user == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found"})
 		return
@@ -204,7 +211,13 @@ func Logout(c *gin.Context) {
 		return
 	}
 
-	storedToken, err := repository.GetRefreshToken(claims.UserID)
+	userID, err := uuid.Parse(claims.UserID)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid user ID in token"})
+		return
+	}
+
+	storedToken, err := repository.GetRefreshToken(userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch refresh token"})
 		return
@@ -215,7 +228,7 @@ func Logout(c *gin.Context) {
 		return
 	}
 
-	err = repository.UpdateRefreshToken(claims.UserID, "")
+	err = repository.UpdateRefreshToken(userID, "")
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to logout"})
 		return
@@ -242,9 +255,15 @@ func GetUser(c *gin.Context) {
 		return
 	}
 
-	userUUID, ok := userID.(uuid.UUID)
+	userIDStr, ok := userID.(string)
 	if !ok {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse user ID"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "User ID format invalid"})
+		return
+	}
+
+	userUUID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid user ID"})
 		return
 	}
 
@@ -261,3 +280,37 @@ func GetUser(c *gin.Context) {
 	})
 }
 
+// SendVerificationEmail handles verification link requests
+func SendVerificationEmail(c *gin.Context) {
+	var input struct {
+		Email string `json:"email" binding:"required,email"`
+	}
+
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := services.SendVerification(input.Email); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Verification link sent"})
+}
+
+// VerifyEmailToken handles email verification
+func VerifyEmailToken(c *gin.Context) {
+	token := c.Query("token")
+	if token == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing token"})
+		return
+	}
+
+	if err := services.VerifyEmailToken(token); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Email successfully verified"})
+}

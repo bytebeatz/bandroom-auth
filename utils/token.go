@@ -2,6 +2,7 @@ package utils
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"time"
 
@@ -11,9 +12,9 @@ import (
 
 // Claims structure for JWT
 type Claims struct {
-	UserID uuid.UUID `json:"user_id"`
-	Email  string    `json:"email"`
-	Role   string    `json:"role"` // ✅ Add this line
+	UserID string `json:"user_id"`
+	Email  string `json:"email"`
+	Role   string `json:"role"`
 	jwt.RegisteredClaims
 }
 
@@ -22,10 +23,12 @@ func GenerateAccessToken(userID uuid.UUID, email, role string) (string, error) {
 	secretKey := []byte(os.Getenv("JWT_SECRET"))
 
 	expirationTime := time.Now().Add(15 * time.Minute)
+	//	expirationTime := time.Now().Add(1 * time.Minute)
+
 	claims := &Claims{
-		UserID: userID,
+		UserID: userID.String(),
 		Email:  email,
-		Role:   role, // ✅ Include role here
+		Role:   role,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(expirationTime),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
@@ -41,8 +44,9 @@ func GenerateRefreshToken(userID uuid.UUID) (string, error) {
 	secretKey := []byte(os.Getenv("JWT_SECRET"))
 
 	expirationTime := time.Now().Add(7 * 24 * time.Hour)
+
 	claims := &Claims{
-		UserID: userID,
+		UserID: userID.String(),
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(expirationTime),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
@@ -67,6 +71,11 @@ func ValidateToken(tokenString string) (*Claims, error) {
 	claims, ok := token.Claims.(*Claims)
 	if !ok || !token.Valid {
 		return nil, errors.New("invalid token")
+	}
+
+	// 🔍 Debug: Log expiration info
+	if claims.ExpiresAt != nil {
+		fmt.Printf("[DEBUG] Token expires at: %v | Now: %v\n", claims.ExpiresAt.Time, time.Now())
 	}
 
 	// Corrected expiration check
@@ -126,4 +135,47 @@ func VerifyResetToken(tokenString string) (string, error) {
 	}
 
 	return claims.Email, nil
+}
+
+// GenerateVerificationToken creates a short-lived email verification token (24h)
+func GenerateVerificationToken(email string) (string, error) {
+	secretKey := []byte(os.Getenv("JWT_SECRET"))
+
+	claims := &jwt.RegisteredClaims{
+		Subject:   email,
+		ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
+		IssuedAt:  jwt.NewNumericDate(time.Now()),
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString(secretKey)
+}
+
+// VerifyVerificationToken validates the token and extracts the email
+func VerifyVerificationToken(tokenString string) (string, error) {
+	fmt.Println("🔍 Raw token:", tokenString)
+
+	secretKey := []byte(os.Getenv("JWT_SECRET"))
+	fmt.Println("🔐 JWT_SECRET len:", len(secretKey))
+
+	token, err := jwt.ParseWithClaims(
+		tokenString,
+		&jwt.RegisteredClaims{},
+		func(token *jwt.Token) (any, error) {
+			return secretKey, nil
+		},
+	)
+	if err != nil {
+		fmt.Println("❌ Token parse error:", err)
+		return "", err
+	}
+
+	claims, ok := token.Claims.(*jwt.RegisteredClaims)
+	if !ok || !token.Valid {
+		fmt.Println("❌ Claims invalid or token not valid")
+		return "", errors.New("invalid verification token")
+	}
+
+	fmt.Println("✅ Token subject (email):", claims.Subject)
+	return claims.Subject, nil
 }
