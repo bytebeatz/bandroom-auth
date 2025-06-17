@@ -4,7 +4,9 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log"
 
+	"github.com/bytebeatz/bandroom-auth/config"
 	"github.com/bytebeatz/bandroom-auth/db"
 	"github.com/bytebeatz/bandroom-auth/models"
 	"github.com/bytebeatz/bandroom-auth/utils"
@@ -27,7 +29,7 @@ func GetUserByEmail(email string) (*models.User, error) {
 		refresh_token, is_verified, verification_token, verification_sent_at, 
 		is_active, last_login, last_password_change, 
 		created_at, updated_at, deleted_at 
-		FROM users WHERE email = $1`
+		FROM users WHERE email = $1 AND deleted_at IS NULL`
 
 	row := db.DB.QueryRow(query, email)
 	err := row.Scan(
@@ -90,7 +92,8 @@ func GetUserByID(userID uuid.UUID) (*models.User, error) {
 		refresh_token, is_verified, verification_token, verification_sent_at, 
 		is_active, last_login, last_password_change, 
 		created_at, updated_at, deleted_at 
-		FROM users WHERE id = $1`
+		FROM users 
+		WHERE id = $1 AND deleted_at IS NULL`
 
 	row := db.DB.QueryRow(query, userID)
 	err := row.Scan(
@@ -230,5 +233,39 @@ func MarkEmailVerified(userID uuid.UUID) error {
 	query := `UPDATE users SET is_verified = TRUE, verification_token = NULL, updated_at = NOW() WHERE id = $1`
 	_, err := db.DB.Exec(query, userID)
 	return err
+}
+
+// UpdateLastLogin sets the last_login timestamp
+func UpdateLastLogin(userID uuid.UUID) error {
+	query := `UPDATE users SET last_login = NOW(), updated_at = NOW() WHERE id = $1`
+	_, err := db.DB.Exec(query, userID)
+	return err
+}
+
+// SoftDeleteUser marks a user as deleted and inactive
+func SoftDeleteUser(userID uuid.UUID) error {
+	query := `UPDATE users SET deleted_at = NOW(), is_active = FALSE, updated_at = NOW() WHERE id = $1`
+	_, err := db.DB.Exec(query, userID)
+	return err
+}
+
+// PurgeDeletedUsers deletes users whose deleted_at is older than the configured grace period
+func PurgeDeletedUsers() error {
+	grace := config.Config.DeletionGracePeriod
+	query := fmt.Sprintf(`
+		DELETE FROM users
+		WHERE deleted_at IS NOT NULL
+		AND deleted_at < NOW() - INTERVAL '%s'`, grace)
+
+	result, err := db.DB.Exec(query)
+	if err != nil {
+		return err
+	}
+
+	count, _ := result.RowsAffected()
+	if count > 0 {
+		log.Printf("🧹 Purged %d user(s) deleted more than %s ago", count, grace)
+	}
+	return nil
 }
 

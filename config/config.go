@@ -11,12 +11,13 @@ import (
 
 // AppConfig holds all configuration settings
 type AppConfig struct {
-	ServiceName string
-	DatabaseURL string
-	DBPassword  string
-	JWTSecret   string
-	ServerPort  string
-	DebugMode   bool
+	ServiceName         string
+	DatabaseURL         string
+	DBPassword          string
+	JWTSecret           string
+	ServerPort          string
+	DebugMode           bool
+	DeletionGracePeriod string // ✅ NEW
 }
 
 var Config *AppConfig
@@ -44,14 +45,16 @@ func LoadConfig() {
 	}
 
 	jwtSecret := getEnv("JWT_SECRET", "")
+	gracePeriod := getEnv("DELETION_GRACE_PERIOD", "30d") // ✅ Default to 30 days
 
 	Config = &AppConfig{
-		ServiceName: getEnv("SERVICE_NAME", "Authentication"),
-		DatabaseURL: databaseURL,
-		DBPassword:  dbPassword,
-		JWTSecret:   jwtSecret,
-		ServerPort:  getEnv("PORT", "8080"),
-		DebugMode:   debugMode,
+		ServiceName:         getEnv("SERVICE_NAME", "Authentication"),
+		DatabaseURL:         databaseURL,
+		DBPassword:          dbPassword,
+		JWTSecret:           jwtSecret,
+		ServerPort:          getEnv("PORT", "8080"),
+		DebugMode:           debugMode,
+		DeletionGracePeriod: gracePeriod, // ✅ Store for usage in purging
 	}
 
 	// Ensure required values exist
@@ -64,6 +67,7 @@ func LoadConfig() {
 
 	// Debug output
 	log.Println("🔐 Loaded JWT_SECRET length:", len(Config.JWTSecret))
+	log.Println("🗑️ Deletion grace period set to:", Config.DeletionGracePeriod)
 	log.Println("✅ Configuration loaded successfully")
 }
 

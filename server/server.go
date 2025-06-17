@@ -5,10 +5,12 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/bytebeatz/bandroom-auth/config"
 	"github.com/bytebeatz/bandroom-auth/db"
 	"github.com/bytebeatz/bandroom-auth/middlewares"
+	"github.com/bytebeatz/bandroom-auth/repository"
 	"github.com/bytebeatz/bandroom-auth/routes"
 
 	"github.com/gin-gonic/gin"
@@ -32,6 +34,9 @@ func Start() error {
 	routes.AuthRoutes(router)
 	routes.StatusRoutes(router)
 
+	// 🔁 Start background cleanup job
+	go startCleanupWorker()
+
 	// Determine port
 	port := os.Getenv("PORT")
 	if port == "" {
@@ -53,5 +58,22 @@ func Start() error {
 
 	log.Println("🛑 Shutting down auth server gracefully...")
 	return nil
+}
+
+// startCleanupWorker purges users soft-deleted more than 30 days ago
+func startCleanupWorker() {
+	ticker := time.NewTicker(24 * time.Hour)
+	//ticker := time.NewTicker(10 * time.Second)
+
+	log.Println("🧹 Cleanup worker started. Running every 24 hours.")
+
+	for range ticker.C {
+		log.Println("⏳ Checking for expired soft-deleted users...")
+		if err := repository.PurgeDeletedUsers(); err != nil {
+			log.Println("❌ Error during user purge:", err)
+		} else {
+			log.Println("✅ Purged soft-deleted users older than 30 days")
+		}
+	}
 }
 

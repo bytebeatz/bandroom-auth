@@ -31,7 +31,27 @@ func AuthValidate(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Token is valid", "user_id": claims.UserID})
+	// Look up the full user
+	userUUID, err := uuid.Parse(claims.UserID)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid user ID in token"})
+		return
+	}
+
+	user, err := repository.GetUserByID(userUUID)
+	if err != nil || user == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found"})
+		return
+	}
+
+	// ✅ Return full profile info
+	c.JSON(http.StatusOK, gin.H{
+		"message":     "Token is valid",
+		"user_id":     user.ID,
+		"email":       user.Email,
+		"role":        user.Role,
+		"is_verified": user.IsVerified,
+	})
 }
 
 // Register creates a new user account
@@ -83,7 +103,15 @@ func Register(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"message": "User registered successfully", "user_id": user.ID})
+	// ✅ Automatically send verification email
+	if err := services.SendVerification(user.Email); err != nil {
+		fmt.Println("⚠️ Warning: Failed to send verification email:", err)
+	}
+
+	c.JSON(http.StatusCreated, gin.H{
+		"message": "User registered successfully. A verification link has been sent to your email.",
+		"user_id": user.ID,
+	})
 }
 
 // Login authenticates a user and issues access + refresh tokens
@@ -106,6 +134,19 @@ func Login(c *gin.Context) {
 		middlewares.TrackFailedLogin(ip)
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
 		return
+	}
+
+	// ✋ Check if email is verified
+	if !user.IsVerified {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "Email not verified. Please check your inbox for the verification link.",
+		})
+		return
+	}
+
+	// ✅ Update last_login timestamp
+	if err := repository.UpdateLastLogin(user.ID); err != nil {
+		fmt.Println("⚠️ Failed to update last_login:", err)
 	}
 
 	accessToken, err := utils.GenerateAccessToken(user.ID, user.Email, user.Role)
@@ -313,4 +354,67 @@ func VerifyEmailToken(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Email successfully verified"})
+}
+
+// ResendVerificationEmail handles re-sending verification if not yet verified
+func ResendVerificationEmail(c *gin.Context) {
+	var input struct {
+		Email string `json:"email" binding:"required,email"`
+	}
+
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	email := strings.ToLower(input.Email)
+
+	user, err := repository.GetUserByEmail(email)
+	if err != nil || user == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+		return
+	}
+
+	if user.IsVerified {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Email is already verified"})
+		return
+	}
+
+	if err := services.SendVerification(email); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to send verification email"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Verification link has been resent to your email.",
+	})
+}
+
+// DeleteAccount marks the authenticated user for soft deletion
+func DeleteAccount(c *gin.Context) {
+	userIDRaw, exists := c.Get("userID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
+	userIDStr, ok := userIDRaw.(string)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "User ID format invalid"})
+		return
+	}
+
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
+		return
+	}
+
+	err = repository.SoftDeleteUser(userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete account"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Account scheduled for deletion in 30 days."})
 }
