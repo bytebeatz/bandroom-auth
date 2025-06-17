@@ -269,3 +269,33 @@ func PurgeDeletedUsers() error {
 	return nil
 }
 
+// PromoteToAdmin sets the role of a user to 'admin'
+func PromoteToAdmin(email string) error {
+	query := `UPDATE users SET role = 'admin', updated_at = NOW() WHERE email = $1 AND deleted_at IS NULL`
+	result, err := db.DB.Exec(query, email)
+	if err != nil {
+		return err
+	}
+
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return fmt.Errorf("no matching active user found with email: %s", email)
+	}
+	return nil
+}
+
+// DemoteToUser changes a user's role from admin to user
+func DemoteToUser(email string) error {
+	query := `UPDATE users SET role = 'user', updated_at = NOW() WHERE email = $1 AND deleted_at IS NULL`
+	result, err := db.DB.Exec(query, email)
+	if err != nil {
+		return err
+	}
+
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return fmt.Errorf("no user found or already demoted")
+	}
+	return nil
+}
+

@@ -12,7 +12,6 @@ curl -X POST http://localhost:8081/auth/register \
 "email": "user1@bandroom.xyz",
 "username": "user1",
 "password": "P4ssword!"
-
 }' | jq
 
 ### Expected Response
@@ -80,9 +79,22 @@ curl -X POST http://localhost:8081/auth/resend-verification \
  -H "Content-Type: application/json" \
  -d '{ "email": "user2@bandroom.xyz" }' | jq
 
-# Test the token using curl to verify
+# Verify token
 
 curl "http://localhost:8081/auth/verify?token=PASTE_TOKEN_HERE" | jq
+
+# Soft delete a user
+
+curl -X DELETE http://localhost:8081/auth/delete \
+ -H "Authorization: Bearer YOUR_ACCESS_TOKEN_HERE" | jq
+
+# Promote a user to admin role
+
+go run cmd/cli/promote.go email --confirm
+
+# Demote an admin to a user role
+
+go run cmd/cli/demote/main.go email --confirm
 
 # Create table for users
 
