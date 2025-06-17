@@ -159,4 +159,3 @@ func GetUser(userID uuid.UUID) (*models.User, error) {
 	}
 	return user, nil
 }
-

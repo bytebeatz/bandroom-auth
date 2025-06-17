@@ -113,6 +113,10 @@ func GenerateResetToken(email string) (string, error) {
 func VerifyResetToken(tokenString string) (string, error) {
 	secretKey := []byte(os.Getenv("JWT_SECRET"))
 
+	// 🐛 DEBUG PRINTS
+	fmt.Println("🔑 Raw reset token:", tokenString)
+	fmt.Printf("⏰ JWT_SECRET len: %d\n", len(secretKey))
+
 	token, err := jwt.ParseWithClaims(
 		tokenString,
 		&ResetClaims{},
@@ -121,19 +125,22 @@ func VerifyResetToken(tokenString string) (string, error) {
 		},
 	)
 	if err != nil {
+		fmt.Println("❌ Token parse error:", err)
 		return "", err
 	}
 
 	claims, ok := token.Claims.(*ResetClaims)
 	if !ok || !token.Valid {
+		fmt.Println("❌ Claims invalid or token not valid")
 		return "", errors.New("invalid reset token")
 	}
 
-	// Check expiration
 	if claims.ExpiresAt != nil && claims.ExpiresAt.Before(time.Now()) {
+		fmt.Println("⌛ Token expired at:", claims.ExpiresAt.Time)
 		return "", errors.New("reset token has expired")
 	}
 
+	fmt.Println("✅ Reset token valid for:", claims.Email)
 	return claims.Email, nil
 }
 

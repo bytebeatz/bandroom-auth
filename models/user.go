@@ -17,6 +17,8 @@ type User struct {
 	IsVerified         bool       `json:"is_verified"`             // Whether email is verified
 	VerificationToken  *string    `json:"verification_token"`      // Pending verification token
 	VerificationSentAt time.Time  `json:"verification_sent_at"`    // When token was sent
+	ResetToken         *string    `json:"reset_token"`             // Token for password reset (nullable)
+	ResetSentAt        *time.Time `json:"reset_sent_at"`           // Timestamp when reset was requested
 	LastPasswordChange time.Time  `json:"last_password_change"`    // Track last password update
 	LastLogin          *time.Time `json:"last_login,omitempty"`    // Optional: track last login
 	IsActive           bool       `json:"is_active"`               // Whether account is active

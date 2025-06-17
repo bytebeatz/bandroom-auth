@@ -22,13 +22,16 @@ func GetUserByEmail(email string) (*models.User, error) {
 		verificationSentAt sql.NullTime
 		lastLogin          sql.NullTime
 		deletedAt          sql.NullTime
+		resetToken         sql.NullString
+		resetSentAt        sql.NullTime
 	)
 
 	query := `SELECT 
 		id, email, username, password_hash, role, 
 		refresh_token, is_verified, verification_token, verification_sent_at, 
 		is_active, last_login, last_password_change, 
-		created_at, updated_at, deleted_at 
+		created_at, updated_at, deleted_at, 
+		reset_token, reset_sent_at
 		FROM users WHERE email = $1 AND deleted_at IS NULL`
 
 	row := db.DB.QueryRow(query, email)
@@ -48,6 +51,8 @@ func GetUserByEmail(email string) (*models.User, error) {
 		&user.CreatedAt,
 		&user.UpdatedAt,
 		&deletedAt,
+		&resetToken,
+		&resetSentAt,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -72,6 +77,12 @@ func GetUserByEmail(email string) (*models.User, error) {
 	if deletedAt.Valid {
 		user.DeletedAt = &deletedAt.Time
 	}
+	if resetToken.Valid {
+		user.ResetToken = &resetToken.String
+	}
+	if resetSentAt.Valid {
+		user.ResetSentAt = &resetSentAt.Time
+	}
 
 	return &user, nil
 }
@@ -85,13 +96,16 @@ func GetUserByID(userID uuid.UUID) (*models.User, error) {
 		verificationSentAt sql.NullTime
 		lastLogin          sql.NullTime
 		deletedAt          sql.NullTime
+		resetToken         sql.NullString
+		resetSentAt        sql.NullTime
 	)
 
 	query := `SELECT 
 		id, email, username, password_hash, role, 
 		refresh_token, is_verified, verification_token, verification_sent_at, 
 		is_active, last_login, last_password_change, 
-		created_at, updated_at, deleted_at 
+		created_at, updated_at, deleted_at,
+		reset_token, reset_sent_at
 		FROM users 
 		WHERE id = $1 AND deleted_at IS NULL`
 
@@ -112,6 +126,8 @@ func GetUserByID(userID uuid.UUID) (*models.User, error) {
 		&user.CreatedAt,
 		&user.UpdatedAt,
 		&deletedAt,
+		&resetToken,
+		&resetSentAt,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -134,6 +150,12 @@ func GetUserByID(userID uuid.UUID) (*models.User, error) {
 	}
 	if deletedAt.Valid {
 		user.DeletedAt = &deletedAt.Time
+	}
+	if resetToken.Valid {
+		user.ResetToken = &resetToken.String
+	}
+	if resetSentAt.Valid {
+		user.ResetSentAt = &resetSentAt.Time
 	}
 
 	return &user, nil
@@ -297,5 +319,19 @@ func DemoteToUser(email string) error {
 		return fmt.Errorf("no user found or already demoted")
 	}
 	return nil
+}
+
+// SetResetToken sets a password reset token and timestamp
+func SetResetToken(userID uuid.UUID, token string) error {
+	query := `UPDATE users SET reset_token = $1, reset_sent_at = NOW(), updated_at = NOW() WHERE id = $2`
+	_, err := db.DB.Exec(query, token, userID)
+	return err
+}
+
+// ClearResetToken clears the user's password reset token
+func ClearResetToken(userID uuid.UUID) error {
+	query := `UPDATE users SET reset_token = NULL, reset_sent_at = NULL, updated_at = NOW() WHERE id = $1`
+	_, err := db.DB.Exec(query, userID)
+	return err
 }
 

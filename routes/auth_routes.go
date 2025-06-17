@@ -12,34 +12,21 @@ func AuthRoutes(router *gin.Engine) {
 	{
 		// Core authentication
 		auth.POST("/register", controllers.Register) // User Registration
-		auth.POST(
-			"/login",
-			middlewares.RateLimitLogin(),
-			controllers.Login,
-		) // Login with Rate Limiting
-		auth.POST("/logout", controllers.Logout)        // Logout user
-		auth.POST("/refresh", controllers.RefreshToken) // Refresh token
-		auth.GET(
-			"/validate",
-			controllers.AuthValidate,
-		) // Validate access token
+		auth.POST("/login", middlewares.RateLimitLogin(), controllers.Login)
+		auth.POST("/logout", controllers.Logout)
+		auth.POST("/refresh", controllers.RefreshToken)
+		auth.GET("/validate", controllers.AuthValidate)
 
 		// Email verification
-		auth.POST(
-			"/resend-verification",
-			controllers.ResendVerificationEmail,
-		) // Re-send email if not verified
-		auth.GET(
-			"/verify",
-			controllers.VerifyEmailToken,
-		) // Handle email verification link
+		auth.POST("/resend-verification", controllers.ResendVerificationEmail)
+		auth.GET("/verify", controllers.VerifyEmailToken)
+
+		// Password reset
+		auth.POST("/forgot-password", controllers.RequestPasswordReset) // Send reset token
+		auth.POST("/reset-password", controllers.ResetPassword)         // Handle reset flow
 
 		// Soft delete account
-		auth.DELETE(
-			"/delete",
-			middlewares.AuthMiddleware(),
-			controllers.DeleteAccount,
-		) // Soft delete user account
+		auth.DELETE("/delete", middlewares.AuthMiddleware(), controllers.DeleteAccount)
 	}
 }
 

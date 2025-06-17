@@ -96,6 +96,15 @@ go run cmd/cli/promote.go email --confirm
 
 go run cmd/cli/demote/main.go email --confirm
 
+# Reset password
+
+curl -X POST http://localhost:8081/auth/reset-password \
+ -H "Content-Type: application/json" \
+ -d '{
+"token": "<TOKEN>",
+"new_password": "NewStr0ngP@ss!"
+}' | jq
+
 # Create table for users
 
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
