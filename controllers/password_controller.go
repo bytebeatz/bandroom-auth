@@ -20,10 +20,17 @@ func RequestPasswordReset(c *gin.Context) {
 
 	email := strings.ToLower(input.Email)
 	if err := services.SendResetToken(email); err != nil {
+		// ✅ Handle rate limit violation gracefully
+		if strings.Contains(err.Error(), "rate limit exceeded") {
+			c.JSON(http.StatusTooManyRequests, gin.H{"error": err.Error()})
+			return
+		}
+
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to process password reset"})
 		return
 	}
 
+	// Even if user doesn't exist, return success to avoid user enumeration
 	c.JSON(http.StatusOK, gin.H{"message": "Password reset link sent to email"})
 }
 
@@ -46,3 +53,4 @@ func ResetPassword(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"message": "Password has been reset successfully"})
 }
+
