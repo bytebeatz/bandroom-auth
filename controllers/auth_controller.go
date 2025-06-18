@@ -418,3 +418,4 @@ func DeleteAccount(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"message": "Account scheduled for deletion in 30 days."})
 }
+
