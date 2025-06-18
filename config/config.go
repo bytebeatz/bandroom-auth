@@ -52,7 +52,7 @@ func LoadConfig() {
 		DatabaseURL:         databaseURL,
 		DBPassword:          dbPassword,
 		JWTSecret:           jwtSecret,
-		ServerPort:          getEnv("PORT", "8080"),
+		ServerPort:          getEnv("PORT", "8081"),
 		DebugMode:           debugMode,
 		DeletionGracePeriod: gracePeriod, // ✅ Store for usage in purging
 	}
@@ -79,4 +79,3 @@ func getEnv(key, defaultValue string) string {
 	}
 	return value
 }
-

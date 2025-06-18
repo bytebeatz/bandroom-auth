@@ -88,6 +88,7 @@ func SendResetToken(email string) error {
 func ResetPassword(token, newPassword string) error {
 	fmt.Printf("🧪 Received token: [%s] (len=%d)\n", token, len(token))
 
+	// Step 1: Verify the token and extract email
 	email, err := utils.VerifyResetToken(token)
 	if err != nil {
 		fmt.Println("❌ Token verification failed:", err)
@@ -95,32 +96,32 @@ func ResetPassword(token, newPassword string) error {
 	}
 	fmt.Println("✅ Extracted email from token:", email)
 
+	// Step 2: Fetch user
 	user, err := repository.GetUserByEmail(email)
-	if err != nil || user == nil {
-		fmt.Println("❌ No user found with email:", email)
-		return errors.New("invalid token")
-	}
-	if user.ResetToken == nil {
-		fmt.Println("❌ User has no reset token in DB")
+	if err != nil || user == nil || user.ResetToken == nil {
 		return errors.New("invalid token")
 	}
 
+	// Step 3: Compare stored vs provided token
 	dbToken := strings.TrimSpace(*user.ResetToken)
 	inputToken := strings.TrimSpace(token)
-
-	fmt.Printf("📦 DB token: [%s] (len=%d)\n", dbToken, len(dbToken))
-	fmt.Printf("🎯 Input token: [%s] (len=%d)\n", inputToken, len(inputToken))
-
 	if dbToken != inputToken {
 		fmt.Println("❌ Reset token mismatch")
 		return errors.New("invalid token")
 	}
 
+	// ✅ Step 4: Enforce password policy
+	if err := utils.ValidatePassword(newPassword); err != nil {
+		return err
+	}
+
+	// Step 5: Hash the password
 	hashed, err := utils.HashPassword(newPassword)
 	if err != nil {
 		return errors.New("failed to hash password")
 	}
 
+	// Step 6: Save and cleanup
 	if err := repository.UpdatePassword(user.ID, hashed); err != nil {
 		return err
 	}

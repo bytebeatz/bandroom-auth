@@ -31,7 +31,6 @@ func AuthValidate(c *gin.Context) {
 		return
 	}
 
-	// Look up the full user
 	userUUID, err := uuid.Parse(claims.UserID)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid user ID in token"})
@@ -44,7 +43,6 @@ func AuthValidate(c *gin.Context) {
 		return
 	}
 
-	// ✅ Return full profile info
 	c.JSON(http.StatusOK, gin.H{
 		"message":     "Token is valid",
 		"user_id":     user.ID,
@@ -54,7 +52,7 @@ func AuthValidate(c *gin.Context) {
 	})
 }
 
-// Register creates a new user account
+// Register creates a new user account (no user enumeration)
 func Register(c *gin.Context) {
 	var input struct {
 		Email    string `json:"email" binding:"required,email"`
@@ -92,29 +90,29 @@ func Register(c *gin.Context) {
 		Username:           input.Username,
 		PasswordHash:       hashedPassword,
 		Role:               "user",
-		RefreshToken:       nil,
 		CreatedAt:          time.Now(),
 		UpdatedAt:          time.Now(),
 		LastPasswordChange: time.Now(),
 	}
 
 	if err := repository.CreateUser(user); err != nil {
-		c.JSON(http.StatusConflict, gin.H{"error": "User already exists or database error"})
+		fmt.Printf("⚠️ Registration failed for email=%s: %v\n", input.Email, err)
+		c.JSON(http.StatusOK, gin.H{
+			"message": "If the email isn't already in use, your account has been created.",
+		})
 		return
 	}
 
-	// ✅ Automatically send verification email
 	if err := services.SendVerification(user.Email); err != nil {
-		fmt.Println("⚠️ Warning: Failed to send verification email:", err)
+		fmt.Println("⚠️ Failed to send verification email:", err)
 	}
 
 	c.JSON(http.StatusCreated, gin.H{
-		"message": "User registered successfully. A verification link has been sent to your email.",
-		"user_id": user.ID,
+		"message": "If the email isn't already in use, your account has been created.",
 	})
 }
 
-// Login authenticates a user and issues access + refresh tokens
+// Login authenticates user and issues tokens
 func Login(c *gin.Context) {
 	var input struct {
 		Email    string `json:"email" binding:"required,email"`
@@ -130,21 +128,19 @@ func Login(c *gin.Context) {
 	ip := c.ClientIP()
 
 	user, err := repository.VerifyCredentials(input.Email, input.Password)
-	if err != nil {
+	if err != nil || user == nil {
 		middlewares.TrackFailedLogin(ip)
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
 		return
 	}
 
-	// ✋ Check if email is verified
 	if !user.IsVerified {
 		c.JSON(http.StatusUnauthorized, gin.H{
-			"error": "Email not verified. Please check your inbox for the verification link.",
+			"error": "Email not verified. Please check your inbox.",
 		})
 		return
 	}
 
-	// ✅ Update last_login timestamp
 	if err := repository.UpdateLastLogin(user.ID); err != nil {
 		fmt.Println("⚠️ Failed to update last_login:", err)
 	}
@@ -161,8 +157,7 @@ func Login(c *gin.Context) {
 		return
 	}
 
-	err = repository.UpdateRefreshToken(user.ID, refreshToken)
-	if err != nil {
+	if err := repository.UpdateRefreshToken(user.ID, refreshToken); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to store refresh token"})
 		return
 	}
@@ -176,7 +171,7 @@ func Login(c *gin.Context) {
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
 		Secure:   false,
-		MaxAge:   60 * 60 * 24 * 7, // 7 days
+		MaxAge:   60 * 60 * 24 * 7,
 	})
 
 	c.JSON(http.StatusOK, gin.H{
@@ -185,7 +180,7 @@ func Login(c *gin.Context) {
 	})
 }
 
-// RefreshToken issues a new access token using the refresh token cookie
+// RefreshToken issues new access token
 func RefreshToken(c *gin.Context) {
 	refreshToken, err := c.Cookie("refresh_token")
 	if err != nil {
@@ -206,18 +201,13 @@ func RefreshToken(c *gin.Context) {
 	}
 
 	user, err := repository.GetUserByID(userID)
-	if err != nil || user == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found"})
+	if err != nil || user == nil || user.RefreshToken == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid session"})
 		return
 	}
 
-	if user.RefreshToken == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "No refresh token stored"})
-		return
-	}
-
-	decryptedToken, err := utils.DecryptRefreshToken(*user.RefreshToken)
-	if err != nil || decryptedToken != refreshToken {
+	storedToken, err := utils.DecryptRefreshToken(*user.RefreshToken)
+	if err != nil || storedToken != refreshToken {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Refresh token does not match"})
 		return
 	}
@@ -231,18 +221,11 @@ func RefreshToken(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"access_token": newAccessToken})
 }
 
-// Logout clears refresh token from DB and cookie
+// Logout clears refresh token
 func Logout(c *gin.Context) {
 	refreshToken, err := c.Cookie("refresh_token")
 	if err != nil {
-		allCookies := []string{}
-		for _, cookie := range c.Request.Cookies() {
-			allCookies = append(allCookies, fmt.Sprintf("%s=%s", cookie.Name, cookie.Value))
-		}
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error":            "Refresh token missing",
-			"availableCookies": allCookies,
-		})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Refresh token missing"})
 		return
 	}
 
@@ -259,18 +242,12 @@ func Logout(c *gin.Context) {
 	}
 
 	storedToken, err := repository.GetRefreshToken(userID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch refresh token"})
-		return
-	}
-
-	if storedToken == "" || storedToken != refreshToken {
+	if err != nil || storedToken != refreshToken {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or expired session"})
 		return
 	}
 
-	err = repository.UpdateRefreshToken(userID, "")
-	if err != nil {
+	if err := repository.UpdateRefreshToken(userID, ""); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to logout"})
 		return
 	}
@@ -288,7 +265,7 @@ func Logout(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Logout successful"})
 }
 
-// GetUser returns current authenticated user
+// GetUser returns authenticated user profile
 func GetUser(c *gin.Context) {
 	userID, exists := c.Get("userID")
 	if !exists {
@@ -296,13 +273,7 @@ func GetUser(c *gin.Context) {
 		return
 	}
 
-	userIDStr, ok := userID.(string)
-	if !ok {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "User ID format invalid"})
-		return
-	}
-
-	userUUID, err := uuid.Parse(userIDStr)
+	userUUID, err := uuid.Parse(userID.(string))
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid user ID"})
 		return
@@ -321,7 +292,7 @@ func GetUser(c *gin.Context) {
 	})
 }
 
-// SendVerificationEmail handles verification link requests
+// SendVerificationEmail triggers verification email
 func SendVerificationEmail(c *gin.Context) {
 	var input struct {
 		Email string `json:"email" binding:"required,email"`
@@ -332,15 +303,18 @@ func SendVerificationEmail(c *gin.Context) {
 		return
 	}
 
-	if err := services.SendVerification(input.Email); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	if err := services.SendVerification(strings.ToLower(input.Email)); err != nil {
+		c.JSON(
+			http.StatusOK,
+			gin.H{"message": "If not verified, a verification link has been sent."},
+		)
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Verification link sent"})
+	c.JSON(http.StatusOK, gin.H{"message": "If not verified, a verification link has been sent."})
 }
 
-// VerifyEmailToken handles email verification
+// VerifyEmailToken confirms email verification
 func VerifyEmailToken(c *gin.Context) {
 	token := c.Query("token")
 	if token == "" {
@@ -356,7 +330,7 @@ func VerifyEmailToken(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Email successfully verified"})
 }
 
-// ResendVerificationEmail handles re-sending verification if not yet verified
+// ResendVerificationEmail handles re-send flow (no enumeration)
 func ResendVerificationEmail(c *gin.Context) {
 	var input struct {
 		Email string `json:"email" binding:"required,email"`
@@ -368,29 +342,21 @@ func ResendVerificationEmail(c *gin.Context) {
 	}
 
 	email := strings.ToLower(input.Email)
-
 	user, err := repository.GetUserByEmail(email)
-	if err != nil || user == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
-		return
-	}
-
-	if user.IsVerified {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Email is already verified"})
+	if err != nil || user == nil || user.IsVerified {
+		fmt.Printf("🔍 Skipped resend: %s (user not found or already verified)\n", email)
+		c.JSON(http.StatusOK, gin.H{"message": "If not verified, a link has been resent."})
 		return
 	}
 
 	if err := services.SendVerification(email); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to send verification email"})
-		return
+		fmt.Println("⚠️ Failed to send verification email:", err)
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"message": "Verification link has been resent to your email.",
-	})
+	c.JSON(http.StatusOK, gin.H{"message": "If not verified, a link has been resent."})
 }
 
-// DeleteAccount marks the authenticated user for soft deletion
+// DeleteAccount performs soft delete
 func DeleteAccount(c *gin.Context) {
 	userIDRaw, exists := c.Get("userID")
 	if !exists {
@@ -398,20 +364,13 @@ func DeleteAccount(c *gin.Context) {
 		return
 	}
 
-	userIDStr, ok := userIDRaw.(string)
-	if !ok {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "User ID format invalid"})
-		return
-	}
-
-	userID, err := uuid.Parse(userIDStr)
+	userID, err := uuid.Parse(userIDRaw.(string))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
 		return
 	}
 
-	err = repository.SoftDeleteUser(userID)
-	if err != nil {
+	if err := repository.SoftDeleteUser(userID); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete account"})
 		return
 	}

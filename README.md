@@ -96,6 +96,12 @@ go run cmd/cli/promote.go email --confirm
 
 go run cmd/cli/demote/main.go email --confirm
 
+# FORGOT PASSWORD
+
+curl -X POST http://localhost:8081/auth/forgot-password \
+ -H "Content-Type: application/json" \
+ -d '{ "email": "user1@bandroom.xyz" }' | jq
+
 # Reset password
 
 curl -X POST http://localhost:8081/auth/reset-password \
