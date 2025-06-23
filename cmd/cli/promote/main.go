@@ -19,7 +19,7 @@ func main() {
 	// Expect exactly one positional argument (email)
 	args := flag.Args()
 	if len(args) != 1 {
-		log.Fatal("❌ Usage: go run cmd/cli/promote.go <email> --confirm")
+		log.Fatal("❌ Usage: go run cmd/cli/promote/main.go <email> --confirm")
 	}
 	email := strings.ToLower(args[0])
 

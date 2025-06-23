@@ -4,7 +4,7 @@
 
 go run cmd/main.go
 
-# Register a New User
+# REGISTER A NEW USER
 
 curl -X POST http://localhost:8081/auth/register \
  -H "Content-Type: application/json" \
@@ -73,15 +73,15 @@ curl -X POST http://localhost:8081/auth/logout \
 "message": "Logout successful"
 }
 
+# Verify token
+
+curl "http://localhost:8081/auth/verify?token=PASTE_TOKEN_HERE" | jq
+
 # Resend verification code
 
 curl -X POST http://localhost:8081/auth/resend-verification \
  -H "Content-Type: application/json" \
  -d '{ "email": "user2@bandroom.xyz" }' | jq
-
-# Verify token
-
-curl "http://localhost:8081/auth/verify?token=PASTE_TOKEN_HERE" | jq
 
 # Soft delete a user
 
@@ -90,7 +90,7 @@ curl -X DELETE http://localhost:8081/auth/delete \
 
 # Promote a user to admin role
 
-go run cmd/cli/promote.go email --confirm
+go run cmd/cli/promote/main.go --confirm admin1@bandroom.xyz
 
 # Demote an admin to a user role
 
