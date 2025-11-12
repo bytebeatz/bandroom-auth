@@ -170,7 +170,7 @@ func Login(c *gin.Context) {
 		Path:     "/",
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
-		Secure:   false,
+		Secure:   true,
 		MaxAge:   60 * 60 * 24 * 7,
 	})
 
@@ -377,4 +377,3 @@ func DeleteAccount(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"message": "Account scheduled for deletion in 30 days."})
 }
-
